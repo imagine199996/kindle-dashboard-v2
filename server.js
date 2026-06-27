@@ -1,18 +1,15 @@
 const express = require('express');
 const app = express();
-// 修改点 1：优先读取云端动态分配的端口，如果本地运行则默认 8000
 const PORT = process.env.PORT || 8000;
 
 app.use(express.static(__dirname));
 
-// 1. 辅助函数：解析 Seeking Alpha RSS 新闻（增强版，兼容多种标签格式）
+// 1. 辅助函数：解析 Seeking Alpha RSS 新闻
 function parseSeekingAlphaRSS(xmlText) {
     const items = [];
-    // 增加对普通 <title> 和 CDATA 的双重兼容匹配
     const matches = xmlText.matchAll(/<item>[\s\S]*?<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>[\s\S]*?<\/item>/g);
     for (const match of matches) {
         if (match[1]) {
-            // 过滤掉可能残存的 html 标签
             const cleanTitle = match[1].replace(/<\/?[^>]+(>|$)/g, "").trim();
             items.push({ title: cleanTitle, time: "Live" });
             if (items.length >= 5) break;
@@ -21,7 +18,7 @@ function parseSeekingAlphaRSS(xmlText) {
     return items;
 }
 
-// 2. 辅助函数：从 Yahoo Finance 获取实时资产数据
+// 2. 辅助函数：从 Yahoo Finance 获取实时资产数据（加入免费中转防封锁）
 async function getYahooFinanceData(ticker) {
     try {
         let symbol = ticker;
@@ -30,9 +27,13 @@ async function getYahooFinanceData(ticker) {
         if (ticker === "VIX") symbol = "^VIX";
         if (ticker === "BTC") symbol = "BTC-USD";
 
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d`;
-        const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } });
-        const json = await res.json();
+        // 使用免费的公用解封中转站（CORS Proxy）来洗白 Render 的脏 IP
+        const url = `https://api.allorigins.win/get?url=${encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d`)}`;
+        
+        const res = await fetch(url);
+        const wrapperJson = await res.json();
+        // 解析中转站返回的内容
+        const json = JSON.parse(wrapperJson.contents);
         const meta = json.chart.result[0].meta;
         
         const price = meta.regularMarketPrice;
@@ -48,7 +49,7 @@ async function getYahooFinanceData(ticker) {
     }
 }
 
-// 3. 辅助函数：获取国际/国内通用天气数据
+// 3. 辅助函数：获取地理天气
 async function getWeatherData(cityName, lat, lon) {
     try {
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m`;
@@ -64,18 +65,18 @@ async function getWeatherData(cityName, lat, lon) {
 // 核心数据接口
 app.get('/api/all-data', async (req, res) => {
     
-    // 1. 抓取 Seeking Alpha 新闻
-    let newsData = [{ title: "Seeking Alpha RSS fetch failed. Connection timed out.", time: "Error" }];
+    // 1. 抓取 Seeking Alpha 新闻（同样使用中转，破除 IP 拦截）
+    let newsData = [{ title: "Seeking Alpha RSS fetch initial failed. Re-routing via Cloud Proxy.", time: "Status" }];
     try {
-        const response = await fetch("https://seekingalpha.com/market_news.xml", {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-        });
-        const xmlText = await response.text();
-        const parsedNews = parseSeekingAlphaRSS(xmlText);
+        const targetUrl = "https://seekingalpha.com/market_news.xml";
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+        const response = await fetch(proxyUrl);
+        const wrapperJson = await response.json();
+        const parsedNews = parseSeekingAlphaRSS(wrapperJson.contents);
         if (parsedNews.length > 0) newsData = parsedNews;
     } catch (e) {}
 
-    // 2. 并发抓取 12 只硬核资产
+    // 2. 并发抓取 12 只资产
     const myAssets = ["NASDAQ", "S&P500", "VIX", "BTC", "MSFT", "AAPL", "NVDA", "TSLA", "GOOG", "MU", "SPCX", "COIN"];
     const finvizData = await Promise.all(myAssets.map(ticker => getYahooFinanceData(ticker)));
 
@@ -95,7 +96,6 @@ app.get('/api/all-data', async (req, res) => {
     });
 });
 
-// 修改点 2：移除了固定的 '0.0.0.0' 绑定限制，改由平台自主控制运行
 app.listen(PORT, () => {
     console.log(`\n==================================================`);
     console.log(`🚀 Custom English Engine (5 News + Global Weather)`);
