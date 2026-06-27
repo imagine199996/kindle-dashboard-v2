@@ -4,37 +4,49 @@
     <meta charset="UTF-8">
     <title>Dashboard</title>
     <style>
-        body { background: black; color: white; font-family: sans-serif; }
+        body { background: black; color: white; font-family: sans-serif; padding: 20px; }
         .page { display: none; }
         .active { display: block; }
+        h1 { color: #aaa; font-size: 24px; margin-bottom: 20px; }
+        p { font-size: 20px; margin: 10px 0; }
     </style>
 </head>
 <body>
     <div id="page-1" class="page active">
-        <h1>Seeking Alpha Live News</h1>
+        <h1>News</h1>
         <div id="news-content">Loading...</div>
     </div>
     <div id="page-2" class="page">
-        <h1>Global Watchlist Matrix</h1>
+        <h1>Watchlist</h1>
         <div id="finviz-content">Loading...</div>
     </div>
     <div id="page-3" class="page">
-        <h1>Global Weather Station</h1>
+        <h1>Weather</h1>
         <div id="weather-content">Loading...</div>
     </div>
 
     <script>
         let currentPage = 1;
         const totalPages = 3;
-        const PAGE_DURATION = 30000; // 30秒循环
+        const PAGE_DURATION = 30000; 
 
         async function fetchAndRender() {
             try {
                 const response = await fetch('/api/all-data');
                 const data = await response.json();
-                document.getElementById('news-content').innerText = JSON.stringify(data.news);
-                document.getElementById('finviz-content').innerText = JSON.stringify(data.finviz);
-                document.getElementById('weather-content').innerText = JSON.stringify(data.weather);
+                
+                // 渲染新闻：将数组转换成HTML段落
+                document.getElementById('news-content').innerHTML = 
+                    data.news.map(n => `<p>${n.title}</p>`).join('');
+                
+                // 渲染股票：将数组转换成HTML段落
+                document.getElementById('finviz-content').innerHTML = 
+                    data.finviz.map(s => `<p>${s.ticker}: ${s.change}</p>`).join('');
+                
+                // 渲染天气
+                document.getElementById('weather-content').innerHTML = 
+                    data.weather.map(w => `<p>${w.name}: ${w.temp}</p>`).join('');
+                    
             } catch (e) {
                 console.error("Fetch failed", e);
             }
@@ -46,13 +58,8 @@
             document.getElementById(`page-${currentPage}`).classList.add('active');
         }
 
-        // 启动轮播
         setInterval(rotatePage, PAGE_DURATION);
-        
-        // 每 10 分钟自动请求一次服务器刷新数据
         setInterval(fetchAndRender, 10 * 60 * 1000);
-        
-        // 初始加载
         fetchAndRender();
     </script>
 </body>
