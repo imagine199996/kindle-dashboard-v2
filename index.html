@@ -33,6 +33,7 @@
         .weather-box .temp { font-size: 38px; font-weight: bold; color: #fff; }
 
         .footer { font-size: 13px; color: #555555; border-top: 1px solid #222; padding-top: 8px; text-align: right; letter-spacing: 0.5px; }
+        .loading-text { font-size: 18px; color: #888; font-style: italic; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -40,17 +41,17 @@
     <div class="container">
         <div id="page-1" class="page active">
             <div class="header">SEEKING ALPHA LIVE NEWS</div>
-            <div id="news-list"></div>
+            <div id="news-list"><div class="loading-text">Loading stream data...</div></div>
         </div>
 
         <div id="page-2" class="page">
             <div class="header">GLOBAL WATCHLIST MATRIX</div>
-            <div class="grid-assets" id="asset-list"></div>
+            <div class="grid-assets" id="asset-list"><div class="loading-text">Connecting to Market Core...</div></div>
         </div>
 
         <div id="page-3" class="page">
             <div class="header">GLOBAL WEATHER STATION</div>
-            <div class="grid-weather" id="weather-list"></div>
+            <div class="grid-weather" id="weather-list"><div class="loading-text">Fetching Station Conditions...</div></div>
         </div>
 
         <div class="footer" id="system-status">System Initializing...</div>
@@ -61,29 +62,42 @@
         const totalPages = 3;
 
         function fetchAndRender() {
+            // 使用相对路径，完美适配云端运行环境
             fetch('/api/all-data?t=' + new Date().getTime())
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) throw new Error('Network response was not ok');
+                    return res.json();
+                })
                 .then(data => {
                     // 1. Render News (5 Items Max)
-                    document.getElementById('news-list').innerHTML = data.news.map(item => `<div class="list-item">⚡ [${item.time}] ${item.title}</div>`).join('');
+                    if (data.news && data.news.length > 0) {
+                        document.getElementById('news-list').innerHTML = data.news.map(item => `<div class="list-item">⚡ [${item.time}] ${item.title}</div>`).join('');
+                    }
 
                     // 2. Render 12-Asset Heatmap
-                    document.getElementById('asset-list').innerHTML = data.finviz.map(item => {
-                        const isUp = item.change.startsWith('+');
-                        return `<div class="asset-box ${isUp ? 'up' : ''}">${item.ticker}<br>${item.change}%</div>`;
-                    }).join('');
+                    if (data.finviz && data.finviz.length > 0) {
+                        document.getElementById('asset-list').innerHTML = data.finviz.map(item => {
+                            const isUp = item.change.startsWith('+');
+                            return `<div class="asset-box ${isUp ? 'up' : ''}">${item.ticker}<br>${item.change}%</div>`;
+                        }).join('');
+                    }
 
                     // 3. Render 4-City Weather
-                    document.getElementById('weather-list').innerHTML = data.weather.map(item => `
-                        <div class="weather-box">
-                            <div class="city">${item.name.toUpperCase()}</div>
-                            <div class="temp">${item.temp}</div>
-                        </div>
-                    `).join('');
+                    if (data.weather && data.weather.length > 0) {
+                        document.getElementById('weather-list').innerHTML = data.weather.map(item => `
+                            <div class="weather-box">
+                                <div class="city">${item.name.toUpperCase()}</div>
+                                <div class="temp">${item.temp}</div>
+                            </div>
+                        `).join('');
+                    }
 
-                    document.getElementById('system-status').innerText = `PAGE: ${currentPage}/${totalPages} | SYNC: ${data.systemTime}`;
+                    document.getElementById('system-status').innerText = `PAGE: ${currentPage}/${totalPages} | SYNC: ${data.systemTime || 'LIVE'}`;
                 })
-                .catch(() => { document.getElementById('system-status').innerText = "DATA SYNC TIMEOUT."; });
+                .catch((err) => { 
+                    console.error(err);
+                    document.getElementById('system-status').innerText = "DATA SYNC TIMEOUT. RETRYING..."; 
+                });
         }
 
         function rotatePage() {
@@ -93,8 +107,10 @@
             fetchAndRender();
         }
 
+        // 初始化加载
         fetchAndRender();
-        setInterval(rotatePage, 10000); // 10s local rotation test
+        // 每 10 秒切换一次页面并重新刷数据
+        setInterval(rotatePage, 10000);
     </script>
 </body>
 </html>
