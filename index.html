@@ -1,18 +1,59 @@
-// ... 其他代码不变 ...
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard</title>
+    <style>
+        body { background: black; color: white; font-family: sans-serif; }
+        .page { display: none; }
+        .active { display: block; }
+    </style>
+</head>
+<body>
+    <div id="page-1" class="page active">
+        <h1>Seeking Alpha Live News</h1>
+        <div id="news-content">Loading...</div>
+    </div>
+    <div id="page-2" class="page">
+        <h1>Global Watchlist Matrix</h1>
+        <div id="finviz-content">Loading...</div>
+    </div>
+    <div id="page-3" class="page">
+        <h1>Global Weather Station</h1>
+        <div id="weather-content">Loading...</div>
+    </div>
 
-// 修改这一行：30秒循环
-const PAGE_DURATION = 30000; 
+    <script>
+        let currentPage = 1;
+        const totalPages = 3;
+        const PAGE_DURATION = 30000; // 30秒循环
 
-function rotatePage() {
-    document.getElementById(`page-${currentPage}`).classList.remove('active');
-    currentPage = currentPage >= totalPages ? 1 : currentPage + 1;
-    document.getElementById(`page-${currentPage}`).classList.add('active');
-}
+        async function fetchAndRender() {
+            try {
+                const response = await fetch('/api/all-data');
+                const data = await response.json();
+                document.getElementById('news-content').innerText = JSON.stringify(data.news);
+                document.getElementById('finviz-content').innerText = JSON.stringify(data.finviz);
+                document.getElementById('weather-content').innerText = JSON.stringify(data.weather);
+            } catch (e) {
+                console.error("Fetch failed", e);
+            }
+        }
 
-// 启动循环
-setInterval(rotatePage, PAGE_DURATION);
+        function rotatePage() {
+            document.getElementById(`page-${currentPage}`).classList.remove('active');
+            currentPage = currentPage >= totalPages ? 1 : currentPage + 1;
+            document.getElementById(`page-${currentPage}`).classList.add('active');
+        }
 
-// 额外优化：每 10 分钟自动请求一次服务器刷新数据，以防前端展示陈旧数据
-setInterval(fetchAndRender, 10 * 60 * 1000); 
-
-fetchAndRender();
+        // 启动轮播
+        setInterval(rotatePage, PAGE_DURATION);
+        
+        // 每 10 分钟自动请求一次服务器刷新数据
+        setInterval(fetchAndRender, 10 * 60 * 1000);
+        
+        // 初始加载
+        fetchAndRender();
+    </script>
+</body>
+</html>
