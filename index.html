@@ -1,116 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Global Station Terminal</title>
-    <style>
-        html, body {
-            margin: 0; padding: 0; width: 100%; height: 100%;
-            overflow: hidden; background-color: #000000; color: #ffffff;
-            font-family: -apple-system, BlinkMacSystemFont, Arial, sans-serif;
-        }
-        .container {
-            width: 100vw; height: 100vh; box-sizing: border-box;
-            padding: 25px; display: flex; flex-direction: column; justify-content: space-between;
-        }
-        .page { display: none; width: 100%; flex-grow: 1; flex-direction: column; }
-        .page.active { display: flex; }
-        .header { font-size: 24px; font-weight: bold; border-bottom: 2px solid #ffffff; padding-bottom: 8px; margin-bottom: 12px; letter-spacing: 1px; }
-        
-        /* 5条新闻的精细紧凑布局 */
-        .list-item { font-size: 18px; line-height: 1.4; margin-bottom: 10px; border-bottom: 1px dashed #222; padding-bottom: 8px; }
-        
-        /* 12资产自适应矩阵 */
-        .grid-assets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 5px; }
-        .asset-box { border: 2px solid #ffffff; padding: 12px 5px; text-align: center; font-size: 18px; font-weight: bold; }
-        .asset-box.up { background-color: #ffffff; color: #000000; }
+// ... 其他代码不变 ...
 
-        /* 4城市全球气象站 */
-        .grid-weather { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 5px; }
-        .weather-box { border: 2px solid #222; padding: 22px; text-align: center; background-color: #050505; }
-        .weather-box .city { font-size: 22px; font-weight: bold; margin-bottom: 8px; color: #bbb; }
-        .weather-box .temp { font-size: 38px; font-weight: bold; color: #fff; }
+// 修改这一行：30秒循环
+const PAGE_DURATION = 30000; 
 
-        .footer { font-size: 13px; color: #555555; border-top: 1px solid #222; padding-top: 8px; text-align: right; letter-spacing: 0.5px; }
-        .loading-text { font-size: 18px; color: #888; font-style: italic; margin-top: 20px; }
-    </style>
-</head>
-<body>
+function rotatePage() {
+    document.getElementById(`page-${currentPage}`).classList.remove('active');
+    currentPage = currentPage >= totalPages ? 1 : currentPage + 1;
+    document.getElementById(`page-${currentPage}`).classList.add('active');
+}
 
-    <div class="container">
-        <div id="page-1" class="page active">
-            <div class="header">SEEKING ALPHA LIVE NEWS</div>
-            <div id="news-list"><div class="loading-text">Loading stream data...</div></div>
-        </div>
+// 启动循环
+setInterval(rotatePage, PAGE_DURATION);
 
-        <div id="page-2" class="page">
-            <div class="header">GLOBAL WATCHLIST MATRIX</div>
-            <div class="grid-assets" id="asset-list"><div class="loading-text">Connecting to Market Core...</div></div>
-        </div>
+// 额外优化：每 10 分钟自动请求一次服务器刷新数据，以防前端展示陈旧数据
+setInterval(fetchAndRender, 10 * 60 * 1000); 
 
-        <div id="page-3" class="page">
-            <div class="header">GLOBAL WEATHER STATION</div>
-            <div class="grid-weather" id="weather-list"><div class="loading-text">Fetching Station Conditions...</div></div>
-        </div>
-
-        <div class="footer" id="system-status">System Initializing...</div>
-    </div>
-
-    <script>
-        let currentPage = 1;
-        const totalPages = 3;
-
-        function fetchAndRender() {
-            // 使用相对路径，完美适配云端运行环境
-            fetch('/api/all-data?t=' + new Date().getTime())
-                .then(res => {
-                    if (!res.ok) throw new Error('Network response was not ok');
-                    return res.json();
-                })
-                .then(data => {
-                    // 1. Render News (5 Items Max)
-                    if (data.news && data.news.length > 0) {
-                        document.getElementById('news-list').innerHTML = data.news.map(item => `<div class="list-item">⚡ [${item.time}] ${item.title}</div>`).join('');
-                    }
-
-                    // 2. Render 12-Asset Heatmap
-                    if (data.finviz && data.finviz.length > 0) {
-                        document.getElementById('asset-list').innerHTML = data.finviz.map(item => {
-                            const isUp = item.change.startsWith('+');
-                            return `<div class="asset-box ${isUp ? 'up' : ''}">${item.ticker}<br>${item.change}%</div>`;
-                        }).join('');
-                    }
-
-                    // 3. Render 4-City Weather
-                    if (data.weather && data.weather.length > 0) {
-                        document.getElementById('weather-list').innerHTML = data.weather.map(item => `
-                            <div class="weather-box">
-                                <div class="city">${item.name.toUpperCase()}</div>
-                                <div class="temp">${item.temp}</div>
-                            </div>
-                        `).join('');
-                    }
-
-                    document.getElementById('system-status').innerText = `PAGE: ${currentPage}/${totalPages} | SYNC: ${data.systemTime || 'LIVE'}`;
-                })
-                .catch((err) => { 
-                    console.error(err);
-                    document.getElementById('system-status').innerText = "DATA SYNC TIMEOUT. RETRYING..."; 
-                });
-        }
-
-        function rotatePage() {
-            document.getElementById(`page-${currentPage}`).classList.remove('active');
-            currentPage = currentPage >= totalPages ? 1 : currentPage + 1;
-            document.getElementById(`page-${currentPage}`).classList.add('active');
-            fetchAndRender();
-        }
-
-        // 初始化加载
-        fetchAndRender();
-        // 每 10 秒切换一次页面并重新刷数据
-        setInterval(rotatePage, 10000);
-    </script>
-</body>
-</html>
+fetchAndRender();
