@@ -1,17 +1,21 @@
 const express = require('express');
 const app = express();
-const PORT = 8000;
+// 修改点 1：优先读取云端动态分配的端口，如果本地运行则默认 8000
+const PORT = process.env.PORT || 8000;
 
 app.use(express.static(__dirname));
 
-// 1. 辅助函数：解析 Seeking Alpha RSS 新闻（已调至 5 条）
+// 1. 辅助函数：解析 Seeking Alpha RSS 新闻（增强版，兼容多种标签格式）
 function parseSeekingAlphaRSS(xmlText) {
     const items = [];
-    const matches = xmlText.matchAll(/<item>[\s\S]*?<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>[\s\S]*?<\/item>/g);
+    // 增加对普通 <title> 和 CDATA 的双重兼容匹配
+    const matches = xmlText.matchAll(/<item>[\s\S]*?<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>[\s\S]*?<\/item>/g);
     for (const match of matches) {
         if (match[1]) {
-            items.push({ title: match[1].trim(), time: "Live" });
-            if (items.length >= 5) break; // 修改点：提升至 5 条
+            // 过滤掉可能残存的 html 标签
+            const cleanTitle = match[1].replace(/<\/?[^>]+(>|$)/g, "").trim();
+            items.push({ title: cleanTitle, time: "Live" });
+            if (items.length >= 5) break;
         }
     }
     return items;
@@ -27,7 +31,7 @@ async function getYahooFinanceData(ticker) {
         if (ticker === "BTC") symbol = "BTC-USD";
 
         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d`;
-        const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } });
         const json = await res.json();
         const meta = json.chart.result[0].meta;
         
@@ -44,7 +48,7 @@ async function getYahooFinanceData(ticker) {
     }
 }
 
-// 3. 辅助函数：获取国际/国内通用天气数据（全英文翻译）
+// 3. 辅助函数：获取国际/国内通用天气数据
 async function getWeatherData(cityName, lat, lon) {
     try {
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m`;
@@ -64,18 +68,18 @@ app.get('/api/all-data', async (req, res) => {
     let newsData = [{ title: "Seeking Alpha RSS fetch failed. Connection timed out.", time: "Error" }];
     try {
         const response = await fetch("https://seekingalpha.com/market_news.xml", {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
         });
         const xmlText = await response.text();
         const parsedNews = parseSeekingAlphaRSS(xmlText);
         if (parsedNews.length > 0) newsData = parsedNews;
     } catch (e) {}
 
-    // 2. 并发抓取 12 只硬核资产（英文标识符）
+    // 2. 并发抓取 12 只硬核资产
     const myAssets = ["NASDAQ", "S&P500", "VIX", "BTC", "MSFT", "AAPL", "NVDA", "TSLA", "GOOG", "MU", "SPCX", "COIN"];
     const finvizData = await Promise.all(myAssets.map(ticker => getYahooFinanceData(ticker)));
 
-    // 3. 并发抓取 4 个城市天气（全面转为英文地名）
+    // 3. 并发抓取 4 个城市天气
     const weatherData = await Promise.all([
         getWeatherData("Shanghai", 31.23, 121.47),
         getWeatherData("Tongcheng", 30.75, 116.95),
@@ -91,8 +95,10 @@ app.get('/api/all-data', async (req, res) => {
     });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// 修改点 2：移除了固定的 '0.0.0.0' 绑定限制，改由平台自主控制运行
+app.listen(PORT, () => {
     console.log(`\n==================================================`);
     console.log(`🚀 Custom English Engine (5 News + Global Weather)`);
+    console.log(`🌐 Live on Port: ${PORT}`);
     console.log(`==================================================\n`);
 });
